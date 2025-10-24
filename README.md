@@ -16,11 +16,9 @@ It uses the ThorData API for scraping real-world listings and applies custom AI 
 
 ## Quick Start
 
-### 1. Clone & Install
+### 1. Install Requirements
 
 ```bash
-git clone <your-repo-url>
-cd Car-Price-Analysis-and-Buy-Recommendations
 pip install -r requirements.txt
 ```
 
