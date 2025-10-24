@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Car Profit API Tester</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        section { margin-bottom: 20px; }
+        button { padding: 10px; margin: 5px; }
+        pre { background: #f4f4f4; padding: 10px; overflow: auto; }
+    </style>
+</head>
+<body>
+    <h1>Car Profit API Tester</h1>
+
+    <!-- Analyze Cars -->
+    <section>
+        <h2>Analyze Cars (AI Trade Analysis)</h2>
+        <textarea id="analyze-input" rows="5" cols="50" placeholder='{"cars": [{"title": "Tesla Model 3", "url": "https://example.com", "price_numeric": 25000, "year_numeric": 2025, "mileage_numeric": 10000, "brand": "Tesla", "age": 0, "is_premium": true}]}'></textarea><br>
+        <button onclick="callAnalyze()">Analyze</button>
+        <pre id="analyze-output"></pre>
+    </section>
+
+    <!-- Compare Cars -->
+    <section>
+        <h2>Compare Cars</h2>
+        <input id="car1" type="text" placeholder="Tesla Model 3 2025" />
+        <input id="car2" type="text" placeholder="BMW Z4 2025" /><br>
+        <button onclick="callCompare()">Compare</button>
+        <pre id="compare-output"></pre>
+    </section>
+
+    <!-- AI Suggestions -->
+    <section>
+        <h2>AI Suggestion (Chat)</h2>
+        <input id="message" type="text" placeholder="Recommend a family car under $20000" />
+        <input id="budget" type="number" placeholder="Budget (optional)" />
+        <input id="needs" type="text" placeholder="Needs (e.g., family)" /><br>
+        <button onclick="callSuggest()">Suggest</button>
+        <pre id="suggest-output"></pre>
+    </section>
+
+    <script>
+        const API_BASE = 'http://127.0.0.1:8000';
+
+        async function apiCall(endpoint, data) {
+            try {
+                const response = await fetch(`${API_BASE}${endpoint}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                if (!response.ok) throw new Error(`Error: ${response.status}`);
+                return await response.json();
+            } catch (err) {
+                return { error: err.message };
+            }
+        }
+
+        async function callAnalyze() {
+            const input = JSON.parse(document.getElementById('analyze-input').value);
+            const result = await apiCall('/analyze-cars/', input);
+            document.getElementById('analyze-output').textContent = JSON.stringify(result, null, 2);
+        }
+
+        async function callCompare() {
+            const data = {
+                car1: document.getElementById('car1').value,
+                car2: document.getElementById('car2').value
+            };
+            const result = await apiCall('/compare-cars/', data);
+            document.getElementById('compare-output').textContent = JSON.stringify(result, null, 2);
+        }
+
+        async function callSuggest() {
+            const data = {
+                message: document.getElementById('message').value,
+                budget: parseFloat(document.getElementById('budget').value) || null,
+                needs: document.getElementById('needs').value || null
+            };
+            const result = await apiCall('/ai-suggest/', data);
+            document.getElementById('suggest-output').textContent = JSON.stringify(result, null, 2);
+        }
+    </script>
+</body>
+</html>
