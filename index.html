@@ -309,7 +309,7 @@ let chatHistory = [];
 function renderChat() {
     const output = document.getElementById('suggest-output');
     output.innerHTML = chatHistory.map(m => 
-        `<div>${m.role === 'assistant' ? '🤖' : '👤'} ${m.content}</div>`
+        `<div>${m.role === 'assistant' ? 'D_bot' : 'Me'} ${m.content}</div>`
     ).join('');
     output.scrollTop = output.scrollHeight; // auto-scroll
 }
@@ -347,7 +347,7 @@ async function sendMessage() {
         renderChat();
 
     } catch (err) {
-        chatHistory.push({ role: 'assistant', content: `⚠️ Error: ${err.message}` });
+        chatHistory.push({ role: 'assistant', content: `Error: ${err.message}` });
         renderChat();
     }
 }
