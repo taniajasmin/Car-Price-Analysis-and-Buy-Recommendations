@@ -90,7 +90,7 @@ curl -X POST http://127.0.0.1:8000/ai-suggest/ \
 
 - Parsed results are saved to cars_data.json.
 
-🧾 Project structure
+## Project structure
 ```text
 Car-Price-Analysis-and-Buy-Recommendations/
 ├── app/
