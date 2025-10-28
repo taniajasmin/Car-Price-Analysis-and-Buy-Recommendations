@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Car Profit Analyser</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
+    <style>
+        :root {
+            --primary: #4361ee;
+            --primary-hover: #3a56d4;
+            --bg: #f8f9fa;
+            --card-bg: #ffffff;
+            --text: #212529;
+            --text-light: #6c757d;
+            --border: #dee2e6;
+            --shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            --radius: 12px;
+            --success: #2ecc71;
+            --warning: #f39c12;
+            --danger: #e74c3c;
+        }
+
+        [data-theme="dark"] {
+            --bg: #121212;
+            --card-bg: #1e1e1e;
+            --text: #e0e0e0;
+            --text-light: #b0b0b0;
+            --border: #333;
+            --shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+            transition: background 0.3s ease;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+            position: relative;
+        }
+
+        h1 {
+            font-size: 2.2rem;
+            font-weight: 700;
+            color: var(--primary);
+            margin-bottom: 8px;
+        }
+
+        .subtitle {
+            color: var(--text-light);
+            font-size: 1rem;
+        }
+
+        .theme-toggle {
+            position: absolute;
+            top: 0;
+            right: 0;
+            background: none;
+            border: none;
+            font-size: 1.4rem;
+            color: var(--text-light);
+            cursor: pointer;
+            transition: color 0.3s;
+        }
+
+        .theme-toggle:hover {
+            color: var(--primary);
+        }
+
+        .card {
+            background: var(--card-bg);
+            border-radius: var(--radius);
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: var(--shadow);
+            border: 1px solid var(--border);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+        }
+
+        .card h2 {
+            font-size: 1.4rem;
+            font-weight: 600;
+            margin-bottom: 16px;
+            color: var(--primary);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .card h2 i {
+            font-size: 1.3rem;
+            color: var(--primary);
+        }
+
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        label {
+            font-weight: 500;
+            font-size: 0.95rem;
+            color: var(--text);
+        }
+
+        input, textarea {
+            padding: 12px 14px;
+            border: 1.5px solid var(--border);
+            border-radius: 8px;
+            font-size: 1rem;
+            background: var(--card-bg);
+            color: var(--text);
+            transition: border 0.2s, box-shadow 0.2s;
+            resize: vertical;
+        }
+
+        input:focus, textarea:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(67, 97, 238, 0.15);
+        }
+
+        textarea {
+            min-height: 120px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+        }
+
+        .row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        @media (max-width: 600px) {
+            .row { grid-template-columns: 1fr; }
+        }
+
+        button {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 1rem;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: background 0.2s, transform 0.1s;
+        }
+
+        button:hover {
+            background: var(--primary-hover);
+            transform: translateY(-1px);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button i {
+            font-size: 1.1rem;
+        }
+
+        .output {
+            background: #f1f3f5;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px;
+            margin-top: 16px;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            white-space: pre-wrap;
+            color: var(--text);
+            transition: background 0.3s;
+        }
+
+        [data-theme="dark"] .output {
+            background: #2d2d2d;
+        }
+
+        .loading {
+            color: var(--primary);
+            font-style: italic;
+        }
+
+        footer {
+            text-align: center;
+            margin-top: 40px;
+            color: var(--text-light);
+            font-size: 0.9rem;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            margin-left: 8px;
+        }
+
+        .badge.ai { background: #e3f2fd; color: #1565c0; }
+        .badge.compare { background: #fff3e0; color: #ef6c00; }
+        .badge.analyze { background: #e8f5e8; color: #2e7d32; }
+
+        [data-theme="dark"] .badge.ai { background: #263238; color: #90caf9; }
+        [data-theme="dark"] .badge.compare { background: #3e2723; color: #ffcc80; }
+        [data-theme="dark"] .badge.analyze { background: #1b5e20; color: #a5d6a7; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <header>
+        <button class="theme-toggle" id="themeToggle" title="Toggle dark mode">
+            <i class="fas fa-moon"></i>
+        </button>
+        <h1>Car Profit Analyser</h1>
+        <p class="subtitle">AI-powered car analysis, comparison, and recommendations</p>
+    </header>
+
+    <!-- Analyze Cars -->
+    <div class="card">
+        <h2><i class="fas fa-robot"></i> AI Trade Analysis <span class="badge analyze">BULK</span></h2>
+        <div class="input-group">
+            <label for="analyze-input">Input JSON (Array of Cars)</label>
+            <textarea id="analyze-input" placeholder='{"cars": [{"title": "Tesla Model 3", "url": "https://example.com", "price_numeric": 25000, "year_numeric": 2025, "mileage_numeric": 10000, "brand": "Tesla", "age": 0, "is_premium": true}]}'></textarea>
+        </div>
+        <button onclick="callAnalyze()">
+            <i class="fas fa-play"></i> Analyze Cars
+        </button>
+        <pre class="output" id="analyze-output">Ready to analyze...</pre>
+    </div>
+
+    <!-- Compare Cars -->
+    <div class="card">
+        <h2><i class="fas fa-balance-scale"></i> Compare Two Cars <span class="badge compare">1v1</span></h2>
+        <div class="row">
+            <div class="input-group">
+                <label for="car1">Car 1</label>
+                <input id="car1" type="text" placeholder="Tesla Model 3 2025" />
+            </div>
+            <div class="input-group">
+                <label for="car2">Car 2</label>
+                <input id="car2" type="text" placeholder="BMW Z4 2025" />
+            </div>
+        </div>
+        <button onclick="callCompare()">
+            <i class="fas fa-exchange-alt"></i> Compare
+        </button>
+        <pre class="output" id="compare-output">Enter two cars to compare...</pre>
+    </div>
+
+    <!-- AI Suggestion Chat -->
+    <div class="card">
+        <h2><i class="fas fa-lightbulb"></i> AI Suggestion Chat <span class="badge ai">SMART</span></h2>
+        <div class="output" id="suggest-output" style="max-height: 300px; overflow-y: auto;">
+            Hi there! I am your AI Car Advisor. What type of car are you looking for? (e.g., sedan, SUV, EV)
+        </div>
+        <div class="input-group" style="margin-top:12px;">
+            <label for="message">Your Message</label>
+            <input id="message" type="text" placeholder="Type your question here..." />
+        </div>
+        <button onclick="sendMessage()">
+            <i class="fas fa-paper-plane"></i> Send
+        </button>
+    </div>
+
+        <footer>
+            <p>Car Profit Analyser • Local Dev: <code>http://127.0.0.1:8000</code></p>
+        </footer>
+    </div>
+
+<script>
+const API_BASE = 'http://127.0.0.1:8000';
+let chatState = { stage: 0 };  // Keep track of the chatbot stage
+let chatHistory = [];
+
+// Render chat messages
+function renderChat() {
+    const output = document.getElementById('suggest-output');
+    output.innerHTML = chatHistory.map(m => 
+        `<div>${m.role === 'assistant' ? '🤖' : '👤'} ${m.content}</div>`
+    ).join('');
+    output.scrollTop = output.scrollHeight; // auto-scroll
+}
+
+// Send message
+async function sendMessage() {
+    const input = document.getElementById('message');
+    const userMessage = input.value.trim();
+    if (!userMessage) return;
+
+    // Add user message
+    chatHistory.push({ role: 'user', content: userMessage });
+    renderChat();
+    input.value = '';
+
+    // Prepare payload for FastAPI
+    const payload = { ...chatState, user_input: userMessage };
+
+    try {
+        const res = await fetch(`${API_BASE}/ai-suggest/`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+
+        // Update stage and other state info
+        chatState.stage = data.stage || 0;
+        chatState.car_type = data.car_type || chatState.car_type;
+        chatState.budget = data.budget || chatState.budget;
+        chatState.needs = data.needs || chatState.needs;
+
+        // Add assistant message
+        chatHistory.push({ role: 'assistant', content: data.reply });
+        renderChat();
+
+    } catch (err) {
+        chatHistory.push({ role: 'assistant', content: `⚠️ Error: ${err.message}` });
+        renderChat();
+    }
+}
+
+// Send message on Enter key
+document.getElementById('message').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        sendMessage();
+    }
+});
+
+// Auto-resize textareas
+document.querySelectorAll('textarea').forEach(ta => {
+    ta.addEventListener('input', () => {
+        ta.style.height = 'auto';
+        ta.style.height = ta.scrollHeight + 'px';
+    });
+});
+</script>
+</body>
+</html>
