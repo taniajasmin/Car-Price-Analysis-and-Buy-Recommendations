@@ -24,14 +24,17 @@ class CarAnalysis(BaseModel):
 class AnalysisRequest(BaseModel):
     cars: List[CarData]
 
+
 class Specs(BaseModel):
     model: str
-    engine: Optional[str] = None
-    fuel_type: Optional[str] = None
-    max_power: Optional[str] = None
-    driving_range: Optional[str] = None
-    drivetrain: Optional[str] = None
-    price: Optional[float] = None  # From input or estimated
+    brand: Optional[str] = None
+    price_numeric: Optional[float] = None
+    year_numeric: Optional[int] = None
+    mileage_numeric: Optional[int] = None
+    age: Optional[float] = None
+    is_premium: Optional[bool] = None
+    url: Optional[str] = None
+    match_confidence: Optional[float] = None
 
 class CompareRequest(BaseModel):
     car1: str  
@@ -40,4 +43,4 @@ class CompareRequest(BaseModel):
 class SuggestRequest(BaseModel):
     message: str  # User chat message
     budget: Optional[float] = None
-    needs: Optional[str] = None  # e.g., "family"
+    needs: Optional[str] = None  # e.g: "family
