@@ -12,89 +12,36 @@ from difflib import SequenceMatcher
 
 load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-OPENAI_MODEL_NAME = os.getenv("OPENAI_MODEL_NAME", "gpt-4")  # Default to gpt-4 if not set
+OPENAI_MODEL_NAME = os.getenv("OPENAI_MODEL_NAME", "gpt-4")  
 
-# Load CSV data
-def load_car_data():
-    try:
-        df = pd.read_csv('cars_data.csv')
-        return df.to_dict(orient='records')
-    except FileNotFoundError:
-        print("cars_data.csv not found. Please run the scraper first.")
-        return []
-    
 def load_car_data():
     """
-    Try a few likely paths to find cars_data.csv and return list of dict records.
+    Try to load from cars_data.json (preferred) or fallback to cars_data.csv.
     """
-    possible_paths = [
-        'cars_data.csv',
-        './cars_data.csv',
-        os.path.join(os.path.dirname(__file__), 'cars_data.csv'),
-        os.path.join(os.getcwd(), 'cars_data.csv')
-    ]
-    for p in possible_paths:
-        if p and os.path.exists(p):
-            try:
-                df = pd.read_csv(p)
-                print(f"Loaded cars_data.csv from: {p} (records: {len(df)})")
-                return df.to_dict(orient='records')
-            except Exception as e:
-                print(f"Failed reading {p}: {e}")
-    print("cars_data.csv not found in expected locations. Please run scraper or place cars_data.csv in project root.")
+    json_path = os.path.join(os.getcwd(), "cars_data.json")
+    csv_path = os.path.join(os.getcwd(), "cars_data.csv")
+
+    if os.path.exists(json_path):
+        try:
+            with open(json_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                print(f"Loaded cars_data.json ({len(data)} records)")
+                return data
+        except Exception as e:
+            print(f"Failed to read cars_data.json: {e}")
+
+    if os.path.exists(csv_path):
+        try:
+            import pandas as pd
+            df = pd.read_csv(csv_path)
+            print(f"Loaded cars_data.csv ({len(df)} records)")
+            return df.to_dict(orient="records")
+        except Exception as e:
+            print(f"Failed to read cars_data.csv: {e}")
+
+    print("No car data file found.")
     return []
 
-# def fetch_car_specs(model_str):
-#     """
-#     Try to find a car by matching model_str against scraped titles.
-#     Returns a Specs-like dict with real price if available.
-#     """
-#     if not model_str:
-#         return {'engine': 'N/A', 'fuel_type': 'N/A', 'max_power': 'N/A',
-#                 'driving_range': 'N/A', 'drivetrain': 'N/A', 'price': None}
-
-#     model_lower = model_str.strip().lower()
-#     cars = load_car_data()
-
-#     # 1) Exact/substring match
-#     for car in cars:
-#         title = str(car.get('title', '')).lower()
-#         if not title:
-#             continue
-#         if model_lower in title or title in model_lower:
-#             price = car.get('price_numeric') or car.get('price') or None
-#             return {
-#                 'engine': car.get('engine', 'N/A'),
-#                 'fuel_type': car.get('fuel_type', 'N/A'),
-#                 'max_power': car.get('max_power', 'N/A'),
-#                 'driving_range': car.get('driving_range', 'N/A'),
-#                 'drivetrain': car.get('drivetrain', 'N/A'),
-#                 'price': float(price) if price not in (None, '', 0) else None
-#             }
-
-#     # 2) Token matching (match several important tokens)
-#     tokens = [t for t in re.split(r'[\s\-\_,]+', model_lower) if len(t) > 2]
-#     if tokens:
-#         for car in cars:
-#             title = str(car.get('title', '')).lower()
-#             if not title:
-#                 continue
-#             matched_count = sum(1 for tok in tokens if tok in title)
-#             # require at least half of tokens to match (adjustable)
-#             if tokens and matched_count >= max(1, len(tokens) // 2):
-#                 price = car.get('price_numeric') or car.get('price') or None
-#                 return {
-#                     'engine': car.get('engine', 'N/A'),
-#                     'fuel_type': car.get('fuel_type', 'N/A'),
-#                     'max_power': car.get('max_power', 'N/A'),
-#                     'driving_range': car.get('driving_range', 'N/A'),
-#                     'drivetrain': car.get('drivetrain', 'N/A'),
-#                     'price': float(price) if price not in (None, '', 0) else None
-#                 }
-
-#     # 3) Not found — return placeholders but with explicit None price
-#     print(f"No matching specs found for '{model_str}' in cars_data.csv")
-#     return {'engine': 'N/A', 'fuel_type': 'N/A', 'max_power': 'N/A', 'driving_range': 'N/A', 'drivetrain': 'N/A', 'price': None}
 
 def fetch_car_specs(model_str):
     """
@@ -121,7 +68,7 @@ def fetch_car_specs(model_str):
             "price": None
         }
 
-    # Step 1: Direct substring match
+    # Direct substring match
     for car in cars:
         title = str(car.get("title", "")).lower()
         if model_lower in title:
@@ -133,7 +80,7 @@ def fetch_car_specs(model_str):
                 "price": car.get("price_numeric", None),
             }
 
-    # Step 2: Fuzzy match if no direct hit
+    # Fuzzy match if no direct hit
     best_match = None
     best_score = 0
     for car in cars:
@@ -153,7 +100,7 @@ def fetch_car_specs(model_str):
             "match_confidence": round(best_score, 2)
         }
 
-    # Step 3: Graceful fallback if nothing close enough
+    # Graceful fallback if nothing close enough
     print(f"No match found for '{model_str}'")
     return {
         "model": model_str,
@@ -242,12 +189,47 @@ def assess_risk(df):
     
     return df
 
-# def process_car_data(car_data_list):
-#     df = pd.DataFrame([car.dict() for car in car_data_list])
-#     df = estimate_market_value(df)
-#     df = calculate_costs_and_profit(df)
-#     df = assess_risk(df)
-#     return df.to_dict(orient='records')
+def fetch_car_specs(model_str: str):
+    """
+    Find a car in cars_data.json/csv that best matches the given model name.
+    Return only real scraped fields.
+    """
+    if not model_str:
+        return {"model": "Unknown"}
+
+    model_lower = model_str.strip().lower()
+    cars = load_car_data()
+
+    if not cars:
+        print("No car data loaded.")
+        return {"model": model_str, "error": "No car data found."}
+
+    # Fuzzy match titles
+    best_match = None
+    best_score = 0
+    for car in cars:
+        title = str(car.get("title", "")).lower()
+        score = SequenceMatcher(None, model_lower, title).ratio()
+        if score > best_score:
+            best_match = car
+            best_score = score
+
+    if not best_match or best_score < 0.4:
+        print(f"No close match found for '{model_str}'")
+        return {"model": model_str, "match_confidence": round(best_score, 2)}
+
+    # Return only keys that actually exist in your scraped data
+    return {
+        "model": best_match.get("title", model_str),
+        "brand": best_match.get("brand", "Unknown"),
+        "price_numeric": best_match.get("price_numeric", None),
+        "year_numeric": best_match.get("year_numeric", None),
+        "mileage_numeric": best_match.get("mileage_numeric", None),
+        "age": best_match.get("age", None),
+        "is_premium": best_match.get("is_premium", None),
+        "url": best_match.get("url", None),
+        "match_confidence": round(best_score, 2)
+    }
 
 def process_car_data(car_data_list):
     """
@@ -293,20 +275,20 @@ def process_car_data(car_data_list):
     return normalized
 
 
-def suggest_advice(message, budget=None, needs=None):
-    try:
-        client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-        prompt = f"User query: {message}. Budget: {budget or 'not specified'}. Needs: {needs or 'not specified'}. Provide professional car buying advice."
-        response = client.chat.completions.create(
-            model=os.getenv("OPENAI_MODEL_NAME", "gpt-4o-mini"),  
-            messages=[
-                {"role": "system", "content": "You are a professional car advisor with expertise in family vehicles, budgets, and market trends. Respond naturally, warmly, and helpfully."},
-                {"role": "user", "content": prompt}
-            ],
-            max_tokens=150, 
-            temperature=0.7  
-        )
-        return response.choices[0].message.content
-    except Exception as e:
-        print(f"Error: {str(e)}")
-        return "I'm having a brief connection issue with my advice system. Based on general knowledge: The Tesla Model 3 2025 is efficient for families but check space for car seats. Let's try again soon!"
+# def suggest_advice(message, budget=None, needs=None):
+#     try:
+#         client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+#         prompt = f"User query: {message}. Budget: {budget or 'not specified'}. Needs: {needs or 'not specified'}. Provide professional car buying advice."
+#         response = client.chat.completions.create(
+#             model=os.getenv("OPENAI_MODEL_NAME", "gpt-4o-mini"),  
+#             messages=[
+#                 {"role": "system", "content": "You are a professional car advisor with expertise in family vehicles, budgets, and market trends. Respond naturally, warmly, and helpfully."},
+#                 {"role": "user", "content": prompt}
+#             ],
+#             max_tokens=150, 
+#             temperature=0.7  
+#         )
+#         return response.choices[0].message.content
+#     except Exception as e:
+#         print(f"Error: {str(e)}")
+#         return "I'm having a brief connection issue with my advice system. Based on general knowledge: The Tesla Model 3 2025 is efficient for families but check space for car seats. Let's try again soon!"
