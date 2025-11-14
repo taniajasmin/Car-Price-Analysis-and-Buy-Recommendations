@@ -6,5 +6,5 @@ scikit-learn
 numpy
 requests
 schedule
-
+bs4
 openai
