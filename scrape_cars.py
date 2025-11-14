@@ -1,208 +1,233 @@
-import os
-from dotenv import load_dotenv
-import requests
-from bs4 import BeautifulSoup
-# import csv
-import schedule
-import time
+import http.client
 import re
-from datetime import datetime
 import json
+import time
+import schedule
+from datetime import datetime
+from urllib.parse import urlencode
+from bs4 import BeautifulSoup
+import os
+from dotenv import load_dotenv 
 
 load_dotenv()
 
-def scrape_with_thordata(url):
-    headers = {"Authorization": f"Bearer {os.getenv('THORDATA_API_KEY')}", "Content-Type": "application/x-www-form-urlencoded"}
-    payload = {"url": url, "type": "html", "js_render": "True"}
-    try:
-        response = requests.post("https://universalapi.thordata.com/request", data=payload, headers=headers, timeout=30)
-        if response.status_code == 200:
-            data = response.json()
-            return BeautifulSoup(data.get('html', ''), 'html.parser')
-        else:
-            print(f"Scraping error for {url}: Status {response.status_code}")
-            return None
-    except Exception as e:
-        print(f"Scraping failed for {url}: {str(e)}")
-        return None
+THORDATA_API_KEY = os.getenv("THORDATA_API_KEY")
+if not THORDATA_API_KEY:
+    raise ValueError("THORDATA_API_KEY not found in .env file!")
 
-def scrape_car_listings():
-    urls = ["https://www.2dehands.be/autos/?page=1", "https://www.autoscout24.be/nl/aanbod/auto/?page=1&sort=price&desc=0&ustate=N,U"]
+print(f"Loaded API key: {THORDATA_API_KEY[:10]}...{THORDATA_API_KEY[-4:]}")
+
+# THORDATA (http.client)
+def scrape_with_thordata(url: str) -> BeautifulSoup | None:
+    conn = http.client.HTTPSConnection("universalapi.thordata.com")
+    payload = {"url": url, "type": "html", "js_render": "True"}
+    form_data = urlencode(payload)
+    headers = {
+        'Authorization': f'Bearer {THORDATA_API_KEY}',
+        'Content-Type': 'application/x-www-form-urlencoded'
+    }
+    try:
+        conn.request("POST", "/request", form_data, headers)
+        res = conn.getresponse()
+        if res.status == 200:
+            data = json.loads(res.read().decode("utf-8"))
+            html = data.get("html", "")
+            if html.strip():
+                dbg = f"debug_thordata_{url.split('//')[1].split('/')[0]}.html"
+                with open(dbg, "w", encoding="utf-8") as f:
+                    f.write(html)
+                print(f"[Thordata] Saved {dbg} ({len(html):,} chars)")
+                return BeautifulSoup(html, "html.parser")
+        else:
+            print(f"[Thordata] HTTP {res.status} for {url}")
+    except Exception as e:
+        print(f"[Thordata] Error: {e}")
+    finally:
+        conn.close()
+    return None
+
+# DIRECT FALLBACK
+def scrape_direct(url: str) -> BeautifulSoup | None:
+    import requests
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Accept-Language": "nl-BE,nl;q=0.9",
+        "Referer": "https://www.google.com/",
+    }
+    try:
+        r = requests.get(url, headers=headers, timeout=20)
+        if r.status_code == 200:
+            dbg = f"debug_direct_{url.split('//')[1].split('/')[0]}.html"
+            with open(dbg, "w", encoding="utf-8") as f:
+                f.write(r.text)
+            print(f"[Direct] Saved {dbg} ({len(r.text):,} chars)")
+            return BeautifulSoup(r.text, "html.parser")
+    except Exception as e:
+        print(f"[Direct] Error: {e}")
+    return None
+
+# SCRAPE LISTINGS
+def scrape_car_listings() -> list[dict]:
+    urls = [
+        "https://www.2dehands.be/l/auto-s/?page=1",
+        "https://www.autoscout24.be/nl/lst/?page=1",
+    ]
     all_cars = []
-    
-    for url in urls:
-        soup = scrape_with_thordata(url)
+
+    for base_url in urls:
+        print(f"\n--- Scraping {base_url} ---")
+        soup = scrape_with_thordata(base_url) or scrape_direct(base_url)
         if not soup:
+            print(f"WARNING: No HTML for {base_url}")
             continue
-        
-        # Try to find any article, div, or li elements that might contain listings
+
         listings = []
-        for tag in ['article', 'div', 'li']:
-            potential_listings = soup.find_all(tag, class_=re.compile(r'(listing|item|cldt|hz-Listing)', re.I))
-            if potential_listings:
-                listings = potential_listings
-                print(f"Found {len(listings)} potential listings using <{tag}> on {url}")
-                break
-        
+
+        if "2dehands" in base_url:
+            listings = soup.select("article[data-testid='ad-card']") or \
+                       soup.select("div.hz-Card") or \
+                       soup.select("a[href*='/a/']")
+
+        elif "autoscout" in base_url:
+            listings = soup.select("article.cldt-summary-full-item") or \
+                       soup.select("a[data-item-name='detail-page-link']")
+
         if not listings:
-            print(f"WARNING: No listings found on {url}")
+            print(f"WARNING: No listings on {base_url}")
             continue
-        
-        for listing in listings[:20]:  # Get more listings to increase chances
+
+        print(f"Found {len(listings)} listings")
+
+        for item in listings[:50]:
             try:
-                # Get title
-                title_elem = listing.find(['h2', 'h3', 'h4', 'a'])
-                title = title_elem.text.strip() if title_elem else ""
-                
-                # Get URL
-                link_elem = listing.find('a', href=True)
-                listing_url = ""
-                if link_elem:
-                    listing_url = link_elem['href']
-                    if listing_url.startswith('/'):
-                        if 'autoscout' in url:
-                            listing_url = f"https://www.autoscout24.be{listing_url}"
-                        else:
-                            listing_url = f"https://www.2dehands.be{listing_url}"
-                    elif not listing_url.startswith('http'):
-                        listing_url = ""
-                
-                # Get all text from the listing for parsing
-                raw_text = listing.get_text(separator=' ', strip=True)
-                
-                # Skip if too little text
-                if len(raw_text) < 20:
-                    continue
-                
+                link = item if item.name == "a" else item.find("a", href=True)
+                if not link: continue
+
+                url = link.get("href", "")
+                if url.startswith("/"):
+                    url = ("https://www.autoscout24.be" + url
+                           if "autoscout" in base_url
+                           else "https://www.2dehands.be" + url)
+
+                title_tag = link.select_one("h2, [data-testid='ad-title'], .ListItem_title__ndA4A")
+                title = title_tag.get_text(strip=True) if title_tag else ""
+
+                raw_text = item.get_text(" ", strip=True)
+
+                # BRAND
+                brand = "Unknown"
+                if "autoscout" in base_url:
+                    brand = item.get("data-make", "").strip()
+                if not brand or brand == "Unknown":
+                    brand_match = re.search(r"\b(VW|Volkswagen|BMW|Audi|Mercedes|Opel|Peugeot|Ford|Citroen|Renault|Toyota|Fiat|Skoda|Nissan|Volvo|Seat|Hyundai|Kia|Mazda|Honda|Suzuki|Porsche|Land Rover|Lexus|Tesla|Mini|Jeep|Alfa Romeo|Dacia)\b", title, re.I)
+                    brand = brand_match.group(1) if brand_match else "Unknown"
+
+                # MODEL
+                model = title
+                if brand != "Unknown":
+                    model = re.sub(rf"\b{re.escape(brand)}\b", "", title, count=1, flags=re.I).strip()
+                model = re.sub(r"\+.*|Meer voertuigen.*", "", model).strip()
+
                 all_cars.append({
-                    'title': title,
-                    'url': listing_url,
-                    'raw_text': raw_text
+                    "title": title,
+                    "brand": brand,
+                    "model": model,
+                    "url": url,
+                    "raw_text": raw_text,
                 })
-                    
             except Exception as e:
-                print(f"Parsing error: {str(e)}")
+                print(f"Parse error: {e}")
                 continue
-        
-        print(f"Collected {len([c for c in all_cars if url.split('/')[2] in c.get('url', '')])} raw listings from {url}")
-    
+
+        print(f"Collected {len(all_cars)} cars so far")
+        time.sleep(2)
+
     return all_cars
 
-def parse_car_data(cars):
-    """
-    Extract: price, year, mileage, brand from raw text
-    """
-    print("\nParsing car data...")
-    
-    brands = [
-        'Volkswagen', 'VW', 'Mercedes', 'BMW', 'Audi', 'Opel', 'Peugeot', 'Ford',
-        'Citroen', 'Renault', 'Toyota', 'Fiat', 'Skoda', 'Nissan', 'Volvo', 'Seat',
-        'Hyundai', 'Kia', 'Mazda', 'Honda', 'Suzuki', 'Porsche', 'Land Rover',
-        'Lexus', 'Tesla', 'Mini', 'Jeep', 'Alfa Romeo', 'Iveco', 'Dacia'
-    ]
-    brand_pattern = '|'.join(brands)
-    premium_brands = ['BMW', 'Mercedes', 'Audi', 'Porsche', 'Volvo', 'Land Rover', 'Lexus', 'Tesla']
-    current_year = datetime.now().year
-    
-    parsed_cars = []
-    
-    for car in cars:
-        raw_text = car.get('raw_text', '')
-        title = car.get('title', '')
-        
-        # Extract price (€ symbol)
-        price_match = re.search(r'€\s*([\d.,]+)', raw_text)
-        if price_match:
-            price_text = price_match.group(1).replace('.', '').replace(',', '.')
-            try:
-                price_numeric = float(price_text)
-            except:
-                price_numeric = 0.0
-        else:
-            price_numeric = 0.0
-        
-        # Extract year (4 digits: 19XX or 20XX)
-        year_match = re.search(r'(20[0-2]\d|19[89]\d)', raw_text)
-        year_numeric = int(year_match.group(1)) if year_match else None
-        
-        # Extract mileage (numbers followed by km)
-        mileage_match = re.search(r'([\d.]+)\s*km', raw_text, re.I)
-        if mileage_match:
-            try:
-                mileage_numeric = int(mileage_match.group(1).replace('.', ''))
-            except:
-                mileage_numeric = 0
-        else:
-            mileage_numeric = 0
-        
-        # Extract brand from title
-        brand_match = re.search(f"({brand_pattern})", title, re.IGNORECASE)
-        brand = brand_match.group(1) if brand_match else "Unknown"
-        
-        # Calculate car age
-        age = current_year - year_numeric if year_numeric else None
-        
-        # Mark premium brands
-        is_premium = brand.upper() in [b.upper() for b in premium_brands]
-        
-        # Only keep cars with at least a title and price
-        if title and price_numeric > 0:
-            parsed_cars.append({
-                'title': title,
-                'url': car.get('url', ''),
-                'price_numeric': price_numeric,
-                'year_numeric': year_numeric if year_numeric else 0,
-                'mileage_numeric': mileage_numeric,
-                'brand': brand,
-                'age': age if age else 0,
-                'is_premium': is_premium
+
+# PARSE FINAL DATA
+def parse_car_data(cars: list[dict]) -> list[dict]:
+    print("\n=== PARSING FINAL DATA ===")
+    premium = {"BMW", "Mercedes", "Audi", "Porsche", "Volvo", "Land Rover", "Lexus", "Tesla"}
+    now = datetime.now().year
+    parsed = []
+
+    for i, car in enumerate(cars):
+        txt = car["raw_text"]
+
+        price_match = re.search(r"€\s*([\d.,]+)", txt)
+        price_numeric = float(price_match.group(1).replace(".", "").replace(",", ".")) if price_match else 0.0
+
+        year_match = re.search(r"(20[0-2]\d|19[89]\d)", txt)
+        year_numeric = int(year_match.group(1)) if year_match else 0
+
+        km_match = re.search(r"([\d.]+)\s*km", txt, re.I)
+        mileage_numeric = int(km_match.group(1).replace(".", "")) if km_match else 0
+
+        brand = car["brand"]
+        model = car["model"] or "Unknown"
+        age = now - year_numeric if year_numeric else 0
+        is_premium = brand in premium
+
+        match_confidence = sum([
+            price_numeric > 0,
+            year_numeric > 0,
+            mileage_numeric > 0,
+            brand != "Unknown"
+        ])
+
+        if price_numeric > 0:
+            parsed.append({
+                "model": model,
+                "brand": brand,
+                "price_numeric": price_numeric,
+                "year_numeric": year_numeric,
+                "mileage_numeric": mileage_numeric,
+                "age": age,
+                "is_premium": is_premium,
+                "url": car["url"],
+                "match_confidence": match_confidence,
+                "title": car["title"]
             })
-    
-    print(f"\nData extracted:")
-    print(f"  Total cars parsed: {len(parsed_cars)}")
-    print(f"  Cars with year: {sum(1 for c in parsed_cars if c['year_numeric'] > 0)}")
-    print(f"  Cars with mileage: {sum(1 for c in parsed_cars if c['mileage_numeric'] > 0)}")
-    print(f"  Cars with brand: {sum(1 for c in parsed_cars if c['brand'] != 'Unknown')}")
-    
-    return parsed_cars
+            print(f"[{i+1}] {brand} {model} | €{price_numeric:,.0f} | {year_numeric} | {mileage_numeric:,} km")
 
-# def save_to_csv(cars):
-#     headers = ["title", "url", "price_numeric", "year_numeric", "mileage_numeric", "brand", "age", "is_premium"]
-#     with open('cars_data.csv', 'w', newline='', encoding='utf-8') as f:
-#         writer = csv.DictWriter(f, fieldnames=headers)
-#         writer.writeheader()
-#         writer.writerows(cars)
-#     print(f"\nSaved {len(cars)} cars to cars_data.csv")
+    print(f"\nTotal parsed: {len(parsed)} cars")
+    return parsed
 
-def save_to_json(cars):
-    with open('cars_data.json', 'w', encoding='utf-8') as f:
+# SAVE JSON
+def save_to_json(cars: list[dict]) -> None:
+    with open("cars_data.json", "w", encoding="utf-8") as f:
         json.dump(cars, f, ensure_ascii=False, indent=4)
-    print(f"\nSaved {len(cars)} cars to cars_data.json")
+    print(f"\nSAVED cars_data.json ({len(cars)} cars)")
 
 
-def scrape_and_save():
-    print(f"\n{'='*60}")
-    print(f"Starting scrape at {time.ctime()}")
-    print(f"{'='*60}")
-    
-    raw_listings = scrape_car_listings()
-    
-    if raw_listings:
-        parsed_cars = parse_car_data(raw_listings)
-        if parsed_cars:
-            # save_to_csv(parsed_cars)
-            save_to_json(parsed_cars)
-            print(f"\nScraping completed successfully at {time.ctime()}")
+def job():
+    print("\n" + "="*80)
+    print(f"SCRAPING STARTED: {time.strftime('%Y-%m-%d %H:%M:%S')}")
+    print("Sites: 2dehands.be & autoscout24.be")
+    print("="*80)
+
+    raw = scrape_car_listings()
+    if raw:
+        parsed = parse_car_data(raw)
+        if parsed:
+            save_to_json(parsed)
+            print("SCRAPING & SAVING COMPLETED")
         else:
-            print(f"\nNo valid cars found after parsing.")
+            print("No valid cars after parsing")
     else:
-        print(f"\nNo listings collected from websites.")
+        print("No listings collected")
 
+    print("="*80 + "\n")
+
+# 8. RUN + SCHEDULE
 if __name__ == "__main__":
-    # Run immediately
-    scrape_and_save()
-    # Schedule every 7 days
-    schedule.every(7).days.do(scrape_and_save)
+    job()
+
+    schedule.every(7).days.at("03:00").do(job)
+    print("Scheduler started. Next run in 7 days at 03:00.")
+    print("Keep this script running (or use Task Scheduler/cron).")
+
     while True:
         schedule.run_pending()
         time.sleep(60)
