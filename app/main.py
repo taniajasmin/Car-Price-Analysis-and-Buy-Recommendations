@@ -1,13 +1,15 @@
 from fastapi import FastAPI, HTTPException, Body, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from app.routes import router as api_router
 from pydantic import BaseModel
 from typing import List, Optional, Any
 from dotenv import load_dotenv
-from openai import OpenAI
+# from openai import OpenAI
+import openai
 import os
 
-from app.ai_calculations import process_car_data, fetch_car_specs
+from app.ai_calculations import process_car_data, fetch_car_specs, load_car_data
 from app.routes import router as routes_router
 
 
@@ -19,7 +21,9 @@ app.include_router(router)
 
 # Load environment variables and set up OpenAI
 load_dotenv()
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+openai.api_key = os.getenv("OPENAI_API_KEY")
+
+# client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # Enable CORS
 app.add_middleware(
@@ -43,6 +47,38 @@ class CarInput(BaseModel):
 # Root Endpoint
 def home():
     return {"message": "Car Price Compare & AI Advisor API is running!"}
+
+# Car name and image
+@app.get("/cars/list")
+async def list_cars():
+    """
+    Returns raw scraped cars with title, image_url, url, and price.
+    Useful for displaying car cards in frontend.
+    """
+    try:
+        cars = load_car_data()
+        if not cars:
+            return JSONResponse(
+                content={"status": "error", "message": "No car data found."},
+                status_code=404
+            )
+
+        output = []
+        for c in cars:
+            output.append({
+                "title": c.get("title"),
+                "image_url": c.get("image_url"),
+                "url": c.get("url"),
+                "price": c.get("price"),
+                "brand": c.get("brand"),
+                "year_numeric": c.get("year_numeric"),
+                "mileage_numeric": c.get("mileage_numeric"),
+            })
+
+        return {"status": "success", "cars": output}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # Analyze Cars Route
@@ -135,7 +171,7 @@ def suggest_advice(message, budget=None, needs=None):
             f"Provide friendly and helpful car-buying advice based on market trends."
         )
 
-        response = client.chat.completions.create(
+        response = openai.ChatCompletion.create(
             model=os.getenv("OPENAI_MODEL_NAME", "gpt-4o-mini"),
             messages=[
                 {
