@@ -1,9 +1,29 @@
 from pydantic import BaseModel
 from typing import List, Optional
 
+# class CarData(BaseModel):
+#     title: str
+#     url: str
+#     price_numeric: Optional[float] = None
+#     year_numeric: Optional[int] = None
+#     mileage_numeric: Optional[int] = None
+#     brand: Optional[str] = None
+#     age: Optional[int] = None
+#     is_premium: Optional[bool] = False
+
+
 class CarData(BaseModel):
+    # Scraper fields (optional so incoming raw scrape works)
     title: str
-    url: str
+    url: Optional[str] = None
+    raw_text: Optional[str] = None
+    image_url: Optional[str] = None
+    price: Optional[float] = None     # matches scraper output
+    source: Optional[str] = None
+    page: Optional[int] = None
+    scraped_date: Optional[str] = None
+
+    # Analysis-friendly fields (optional; will be filled/normalized by backend)
     price_numeric: Optional[float] = None
     year_numeric: Optional[int] = None
     mileage_numeric: Optional[int] = None
@@ -43,4 +63,4 @@ class CompareRequest(BaseModel):
 class SuggestRequest(BaseModel):
     message: str  # User chat message
     budget: Optional[float] = None
-    needs: Optional[str] = None  # e.g: "family
+    needs: Optional[str] = None  
