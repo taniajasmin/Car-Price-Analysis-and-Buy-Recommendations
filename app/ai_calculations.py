@@ -1,4 +1,3 @@
-
 import numpy as np
 import pandas as pd
 import requests
@@ -76,29 +75,110 @@ def fetch_car_specs(model_str: str):
     if not cars:
         return {"model": model_str, "error": "No car data found."}
 
+    # 1. Filter out non-car listings / category pages
+    filtered = []
+    for car in cars:
+        title = str(car.get("title", "")).lower()
+
+        # Skip category pages like "Toyota in Toyota"
+        if " in " in title:
+            continue
+
+        # Skip generic listings with no data
+        if (
+            car.get("year_numeric") is None
+            and car.get("mileage_numeric") is None
+            and car.get("raw_text") is None
+        ):
+            continue
+
+        filtered.append(car)
+
+    if not filtered:
+        return {"model": model_str, "error": "No valid listings found."}
+
+    cars = filtered
+
+    # 2. Exact match check (highest priority)
+    for car in cars:
+        title = str(car.get("title", "")).lower()
+
+        if model_lower == title:
+            return {
+                "model": car.get("title"),
+                "brand": car.get("brand"),
+                "price_numeric": car.get("price_numeric"),
+                "year_numeric": car.get("year_numeric"),
+                "mileage_numeric": car.get("mileage_numeric"),
+                "age": car.get("age"),
+                "is_premium": car.get("is_premium"),
+                "url": car.get("url"),
+                "match_confidence": 1.0
+            }
+
+ 
+    # 3. Strong fuzzy match
     best_match = None
     best_score = 0
+
     for car in cars:
         title = str(car.get("title", "")).lower()
         score = SequenceMatcher(None, model_lower, title).ratio()
+
+        # Slight boost if model word appears inside title
+        if model_lower in title:
+            score += 0.15
+
         if score > best_score:
-            best_match = car
             best_score = score
+            best_match = car
 
-    if not best_match or best_score < 0.4:
-        return {"model": model_str, "match_confidence": round(best_score, 2)}
+    # 4. Require strong similarity
+    MIN_MATCH = 0.60     # increased threshold for better quality
 
+    if not best_match or best_score < MIN_MATCH:
+        return {
+            "model": model_str,
+            "match_confidence": round(best_score, 2),
+            "error": "No strong match found"
+        }
+
+    # 5. Return real car fields
     return {
-        "model": best_match.get("title", model_str),
-        "brand": best_match.get("brand", "Unknown"),
-        "price_numeric": best_match.get("price_numeric", None),
-        "year_numeric": best_match.get("year_numeric", None),
-        "mileage_numeric": best_match.get("mileage_numeric", None),
-        "age": best_match.get("age", None),
-        "is_premium": best_match.get("is_premium", None),
-        "url": best_match.get("url", None),
+        "model": best_match.get("title"),
+        "brand": best_match.get("brand"),
+        "price_numeric": best_match.get("price_numeric"),
+        "year_numeric": best_match.get("year_numeric"),
+        "mileage_numeric": best_match.get("mileage_numeric"),
+        "age": best_match.get("age"),
+        "is_premium": best_match.get("is_premium"),
+        "url": best_match.get("url"),
         "match_confidence": round(best_score, 2)
     }
+
+    # best_match = None
+    # best_score = 0
+    # for car in cars:
+    #     title = str(car.get("title", "")).lower()
+    #     score = SequenceMatcher(None, model_lower, title).ratio()
+    #     if score > best_score:
+    #         best_match = car
+    #         best_score = score
+
+    # if not best_match or best_score < 0.4:
+    #     return {"model": model_str, "match_confidence": round(best_score, 2)}
+
+    # return {
+    #     "model": best_match.get("title", model_str),
+    #     "brand": best_match.get("brand", "Unknown"),
+    #     "price_numeric": best_match.get("price_numeric", None),
+    #     "year_numeric": best_match.get("year_numeric", None),
+    #     "mileage_numeric": best_match.get("mileage_numeric", None),
+    #     "age": best_match.get("age", None),
+    #     "is_premium": best_match.get("is_premium", None),
+    #     "url": best_match.get("url", None),
+    #     "match_confidence": round(best_score, 2)
+    # }
 
 
 # Core Calculations
