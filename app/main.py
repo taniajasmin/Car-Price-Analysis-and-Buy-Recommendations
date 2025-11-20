@@ -5,8 +5,8 @@ from app.routes import router as api_router
 from pydantic import BaseModel
 from typing import List, Optional, Any
 from dotenv import load_dotenv
-# from openai import OpenAI
-import openai
+from openai import OpenAI
+# import openai
 import os
 
 from app.ai_calculations import process_car_data, fetch_car_specs, load_car_data
@@ -16,14 +16,16 @@ from app.routes import router as routes_router
 app = FastAPI(title="Car Profit and Analysis API")
 
 router = APIRouter()
+
 app.include_router(routes_router)
 app.include_router(router)
 
 # Load environment variables and set up OpenAI
 load_dotenv()
-openai.api_key = os.getenv("OPENAI_API_KEY")
 
-# client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+# openai.api_key = os.getenv("OPENAI_API_KEY")
+
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # Enable CORS
 app.add_middleware(
@@ -192,18 +194,48 @@ def suggest_advice(message, budget=None, needs=None):
         print(f"AI Error: {e}")
         return "Sorry, I’m having trouble fetching AI advice right now."
 
-# AI Chat Route 
 class ChatState(BaseModel):
-    stage: Optional[int] = 0
-    car_type: Optional[str] = None
-    budget: Optional[float] = None
-    needs: Optional[str] = None
-    user_input: Optional[str] = None
+    stage: int
+    user_input: str | None = None
+    car_type: str | None = None
+    budget: float | None = None
+    needs: str | None = None
 
+def suggest_advice(message, budget=None, needs=None):
+    try:
+        prompt = (
+            f"User query: {message}. "
+            f"Budget: {budget or 'not specified'}. "
+            f"Needs: {needs or 'not specified'}. "
+            f"Give friendly, realistic car buying advice based on today's market."
+        )
 
-# @router.post("/ai-suggest/")
+        response = client.chat.completions.create(
+            model=os.getenv("OPENAI_MODEL_NAME", "gpt-4o-mini"),
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a professional car advisor. Give clear, practical recommendations."
+                    ),
+                },
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0.7,
+            max_tokens=200
+        )
+
+        # return response.choices[0].message["content"]
+        return response.choices[0].message.content
+
+    except Exception as e:
+        print("AI ERROR:", e)
+        return "Sorry, I’m having trouble fetching AI advice right now."
+
 @app.post("/ai-suggest/")
 async def ai_suggest(chat: ChatState):
+
+    # STAGE 0
     if chat.stage == 0:
         return {
             "status": "continue",
@@ -211,41 +243,45 @@ async def ai_suggest(chat: ChatState):
             "reply": "Hi there! I’m your AI Car Advisor. What type of car are you looking for? (e.g., sedan, SUV, EV, family car)",
         }
 
+    # STAGE 1
     elif chat.stage == 1 and chat.user_input:
+        chat.car_type = chat.user_input
         return {
             "status": "continue",
             "stage": 2,
-            "car_type": chat.user_input,
-            "reply": f"Got it — you're looking for a {chat.user_input}. What's your budget range (in USD)?",
+            "car_type": chat.car_type,
+            "reply": f"Great choice! What's your budget range (in USD)?",
         }
 
+    # STAGE 2
     elif chat.stage == 2 and chat.user_input:
         try:
-            budget = float(chat.user_input.replace("$", "").replace(",", ""))
+            chat.budget = float(chat.user_input.replace("$", "").replace(",", ""))
         except:
-            budget = None
+            chat.budget = None
+
         return {
             "status": "continue",
             "stage": 3,
-            "budget": budget,
-            "reply": "Thanks! Lastly, any special needs? (e.g., electric, fuel efficient, low maintenance)",
+            "budget": chat.budget,
+            "reply": "Thanks! Lastly, do you have any specific needs? (electric, low maintenance, fuel efficiency, etc.)",
         }
 
+    # STAGE 3
     elif chat.stage == 3 and chat.user_input:
         chat.needs = chat.user_input
-        suggestion_text = suggest_advice(chat.car_type, chat.budget, chat.needs)
+
+        suggestion_text = suggest_advice(
+            message=f"Car type: {chat.car_type}",
+            budget=chat.budget,
+            needs=chat.needs,
+        )
+
         return {"status": "complete", "reply": suggestion_text}
 
+    # ERROR
     else:
         return {
             "status": "error",
             "reply": "Sorry, I didn’t catch that. Let’s start over!",
         }
-
-@app.get("/car-specs/{model}")
-async def get_car_specs(model: str):
-    try:
-        specs = fetch_car_specs(model)
-        return JSONResponse(content={"status": "success", "specs": specs})
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
