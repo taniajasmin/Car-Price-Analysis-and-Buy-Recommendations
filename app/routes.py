@@ -20,7 +20,6 @@ async def root():
         "usage": "Use /docs for Swagger UI or POST /analyze-cars/ and /compare-cars/."
     }
 
-
 # ANALYZE CARS
 @router.post("/analyze-cars/", response_model=List[CarAnalysis])
 async def analyze_cars(request: AnalysisRequest):
@@ -49,11 +48,9 @@ async def compare_cars(request: CompareRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-
 # AI CHAT ENDPOINT
 class ChatRequest(BaseModel):
     message: str
-
 
 @router.post("/ai/chat")
 async def ai_chat(request: ChatRequest):
