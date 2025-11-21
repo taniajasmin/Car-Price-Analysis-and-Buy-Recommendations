@@ -19,7 +19,13 @@ app = FastAPI(title="Car Profit and Analysis API")
 router = APIRouter()
 
 load_dotenv()
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+client = OpenAI(
+    api_key=os.getenv("OPENAI_API_KEY"),
+)
+
+if not os.getenv("OPENAI_API_KEY"):
+    raise ValueError("OPENAI_API_KEY not found! Create .env file with your key.")
 
 # Enable CORS
 app.add_middleware(
@@ -94,10 +100,15 @@ async def analyze_cars(payload: Any = Body(...)):
                 sum([c.get("expected_profit", 0) for c in processed]) / len(processed)
                 if processed else 0
             ),
+            # "buy_recommendations": [
+            #     c.get("title")
+            #     for c in processed
+            #     if "BUY" in str(c.get("recommendation", "")).upper()
+            # ],
             "buy_recommendations": [
                 c.get("title")
                 for c in processed
-                if "BUY" in str(c.get("recommendation", "")).upper()
+                if c.get("recommendation") in ["BUY", "STRONG BUY"]
             ],
         }
 
