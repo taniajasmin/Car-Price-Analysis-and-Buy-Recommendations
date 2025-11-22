@@ -43,6 +43,7 @@ class ChatState(BaseModel):
     budget: Optional[float] = None
     needs: Optional[str] = None
     user_input: Optional[str] = None
+    history: Optional[list] = []
 
 @app.get("/")
 def home():
@@ -77,6 +78,10 @@ async def list_cars():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+def update_history(chat: ChatState, key: str, value: any):
+    if chat.history is None:
+        chat.history = []
+    chat.history.append({key: value})
 
 # Analyze Cars
 @app.post("/analyze-cars/", response_model=None)
@@ -177,49 +182,82 @@ def suggest_advice(message, budget=None, needs=None):
     except Exception as e:
         return "Error retrieving AI advice."
 
-
 @app.post("/ai-suggest/")
 async def ai_suggest(chat: ChatState):
+
+    # Initialize history if missing
+    if chat.history is None:
+        chat.history = []
+
+    # Stage 0
     if chat.stage == 0:
+        update_history(chat, "stage", 0)
         return {
             "status": "continue",
             "stage": 1,
+            "history": chat.history,
             "reply": "Hi! What type of car are you looking for? (sedan, SUV, EV, family car?)"
         }
 
-    elif chat.stage == 1 and chat.user_input:
+    # Stage 1 (car_type)
+    if chat.stage == 1 and chat.user_input:
+        chat.car_type = chat.user_input
+        update_history(chat, "car_type", chat.car_type)
+
         return {
             "status": "continue",
             "stage": 2,
-            "car_type": chat.user_input,
-            "reply": f"Nice choice. What is your budget for a {chat.user_input}?"
+            "car_type": chat.car_type,
+            "history": chat.history,
+            "reply": f"Nice choice. What is your budget for a {chat.car_type}?"
         }
 
-    elif chat.stage == 2 and chat.user_input:
+    # Stage 2 (budget)
+    if chat.stage == 2 and chat.user_input:
         try:
-            budget = float(chat.user_input.replace("$", "").replace(",", ""))
+            chat.budget = float(chat.user_input.replace("$", "").replace(",", ""))
         except:
-            budget = None
+            chat.budget = None
+
+        update_history(chat, "budget", chat.budget)
 
         return {
             "status": "continue",
             "stage": 3,
-            "budget": budget,
+            "car_type": chat.car_type,
+            "budget": chat.budget,
+            "history": chat.history,
             "reply": "Got it. Any special needs? (electric, fuel efficient, low maintenance)"
         }
 
-    elif chat.stage == 3 and chat.user_input:
-        advice = suggest_advice(chat.car_type, chat.budget, chat.user_input)
-        return {"status": "complete", "reply": advice}
+    # Stage 3 (needs + final suggestion)
+    if chat.stage == 3 and chat.user_input:
+        chat.needs = chat.user_input
+        update_history(chat, "needs", chat.needs)
+
+        advice = suggest_advice(chat.car_type, chat.budget, chat.needs)
+
+        return {
+            "status": "complete",
+            "history": chat.history,
+            "reply": advice
+        }
 
     return {"status": "error", "reply": "Invalid state. Please restart."}
 
-
-# Car Specs Lookup
 @app.get("/car-specs/{model}")
 async def get_car_specs(model: str):
     try:
         specs = fetch_car_specs(model)
+
+        # ERROR HANDLING -- If no match or extremely low confidence
+        if not specs or (specs.get("match_confidence") is not None and specs["match_confidence"] < 0.20):
+            return {
+                "status": "error",
+                "message": "This is not a car model. Please try again."
+            }
+
         return {"status": "success", "specs": specs}
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
